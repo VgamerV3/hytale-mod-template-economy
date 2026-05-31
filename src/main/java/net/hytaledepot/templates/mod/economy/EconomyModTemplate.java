@@ -1,41 +1,34 @@
 package net.hytaledepot.templates.mod.economy;
 
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class EconomyModTemplate {
   private final Map<String, AtomicLong> actionCounters = new ConcurrentHashMap<>();
   private final Map<String, String> lastActionBySender = new ConcurrentHashMap<>();
   private final AtomicBoolean demoFlagEnabled = new AtomicBoolean(false);
   private final AtomicLong errorCount = new AtomicLong();
-  private final Map<String, String> domainState = new ConcurrentHashMap<>();
-  private final Map<String, AtomicLong> numericState = new ConcurrentHashMap<>();
-
+  Map<String, AtomicLong> balances = new ConcurrentHashMap<>();
+  Deque<String> ledger = new ArrayDeque<>();
   private volatile Path dataDirectory;
 
   public void onInitialize(Path dataDirectory) {
     this.dataDirectory = dataDirectory;
-    actionCounters.clear();
-    lastActionBySender.clear();
-    domainState.clear();
-    numericState.clear();
+    balances.computeIfAbsent("treasury", key -> new AtomicLong(500));
   }
 
   public void onShutdown() {
-    actionCounters.clear();
-    lastActionBySender.clear();
-    domainState.clear();
-    numericState.clear();
+    ledger.clear();
   }
 
   public void onHeartbeat(long tick) {
     actionCounters.computeIfAbsent("heartbeat", key -> new AtomicLong()).incrementAndGet();
-    if (tick % 90 == 0) {
-      actionCounters.computeIfAbsent("milestone", key -> new AtomicLong()).incrementAndGet();
-    }
+
   }
 
   public String runAction(String sender, String action, long heartbeatTicks) {
@@ -64,24 +57,13 @@ public final class EconomyModTemplate {
 
   public String diagnostics(String sender, long heartbeatTicks) {
     String directory = dataDirectory == null ? "unset" : dataDirectory.toString();
-    return "sender="
-        + sender
-        + ", heartbeatTicks="
-        + heartbeatTicks
-        + ", demoFlag="
-        + demoFlagEnabled.get()
-        + ", ops="
-        + operationCount()
-        + ", lastAction="
-        + lastActionBySender.getOrDefault(sender, "none")
-        + ", errors="
-        + errorCount.get()
-        + ", domainEntries="
-        + domainState.size()
-        + ", numericEntries="
-        + numericState.size()
-        + ", dataDirectory="
-        + directory;
+    return "sender=" + sender
+        + ", heartbeatTicks=" + heartbeatTicks
+        + ", demoFlag=" + demoFlagEnabled.get()
+        + ", ops=" + operationCount()
+        + ", lastAction=" + lastActionBySender.getOrDefault(sender, "none")
+        + ", errors=" + errorCount.get()
+        + ", accounts=" + balances.size() + ", ledgerEntries=" + ledger.size() + ", treasury=" + balanceOf("treasury") + ", dataDirectory=" + directory;
   }
 
   public long operationCount() {
@@ -98,35 +80,44 @@ public final class EconomyModTemplate {
 
   private String handleDomainAction(String sender, String action, long heartbeatTicks) {
     if ("sample".equals(action) || "credit-demo".equals(action)) {
-      long balance = incrementNumber("balance:" + sender.toLowerCase(), 25);
+      long balance = balanceRef(sender).addAndGet(25);
+      appendLedger("credit", sender, 25, balance);
       return "credited 25 coins, balance=" + balance;
     }
     if ("transfer-demo".equals(action)) {
-      String senderKey = "balance:" + sender.toLowerCase();
-      long senderBalance = number(senderKey);
-      if (senderBalance < 10) {
-        return "transfer blocked, balance=" + senderBalance + " (need >=10)";
+      AtomicLong senderBalance = balanceRef(sender);
+      if (senderBalance.get() < 10) {
+        return "transfer blocked, balance=" + senderBalance.get() + " (need >=10)";
       }
-      setNumber(senderKey, senderBalance - 10);
-      long treasury = incrementNumber("balance:treasury", 10);
-      return "transferred 10 to treasury, senderBalance=" + number(senderKey) + ", treasury=" + treasury;
+      long nextSender = senderBalance.addAndGet(-10);
+      long treasury = balanceRef("treasury").addAndGet(10);
+      appendLedger("transfer", sender, 10, nextSender);
+      return "transferred 10 to treasury, senderBalance=" + nextSender + ", treasury=" + treasury;
     }
     if ("balance-demo".equals(action)) {
-      return "balance=" + number("balance:" + sender.toLowerCase());
+      return "balance=" + balanceOf(sender) + ", treasury=" + balanceOf("treasury");
     }
     return null;
   }
 
-  private long incrementNumber(String key, long delta) {
-    return numericState.computeIfAbsent(key, item -> new AtomicLong()).addAndGet(delta);
+  private AtomicLong balanceRef(String account) {
+    return balances.computeIfAbsent(String.valueOf(account).toLowerCase(), key -> new AtomicLong());
   }
 
-  private long number(String key) {
-    return numericState.computeIfAbsent(key, item -> new AtomicLong()).get();
+  private long balanceOf(String account) {
+    return balanceRef(account).get();
   }
 
-  private void setNumber(String key, long value) {
-    numericState.computeIfAbsent(key, item -> new AtomicLong()).set(value);
+  private void appendLedger(String kind, String account, long amount, long resultingBalance) {
+    ledger.addLast(kind + ":" + account + ":" + amount + ":" + resultingBalance);
+    while (ledger.size() > 24) {
+      ledger.removeFirst();
+    }
+  }
+
+  private static String normalizeAction(String action) {
+    String normalized = String.valueOf(action == null ? "" : action).trim().toLowerCase();
+    return normalized.isEmpty() ? "sample" : normalized;
   }
 
   private static boolean toggleFlag(AtomicBoolean flag) {
@@ -137,10 +128,5 @@ public final class EconomyModTemplate {
         return next;
       }
     }
-  }
-
-  private static String normalizeAction(String action) {
-    String normalized = String.valueOf(action == null ? "" : action).trim().toLowerCase();
-    return normalized.isEmpty() ? "sample" : normalized;
   }
 }
