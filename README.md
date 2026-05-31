@@ -1,40 +1,45 @@
 # hytale-mod-template-economy
 
-## Overview
+A starter focused on balance mutations, transfer-style flows, and the kind of counters you need while prototyping economy features.
 
-Economy-style state handling, operation tracking, and controlled update flows. This repository is a practical starting point for a Hytale mod.
+## Highlights
+- credit, transfer, and balance inspection examples
+- small in-memory ledgers that are easy to replace later
+- diagnostic output that surfaces transaction activity
+- bundled UI or asset-pack resources so the example is usable out of the box
 
-## Main entrypoint
-
-- Main class from manifest.json: net.hytaledepot.templates.mod.economy.EconomyModPlugin
-- Includes asset pack: true
-
-## Source layout
-
-- Java sources: src/main/java
-- Manifest: src/main/resources/manifest.json
-- Runtime jar output: build/libs/hytale-mod-template-economy-1.0.0.jar
-
-## Key classes
-
-- EconomyModPlugin
-- EconomyModTemplate
-
-## Commands
-
-- /hdeconomymoddemo
-- /hdeconomymodstatus
+## Requirements
+- Java 25
+- Hytale Server 0.5.3
+- the included Gradle wrapper
 
 ## Build
+```bash
+./gradlew clean build
+```
 
-1. Ensure the server jar is available in one of these locations:
-   - HYTALE_SERVER_JAR
-   - HYTALE_HOME/install/$patchline/package/game/latest/Server/HytaleServer.jar
-   - workspace root HytaleServer.jar
-   - libs/HytaleServer.jar
-2. Run: ./gradlew clean build
-3. Copy build/libs/hytale-mod-template-economy-1.0.0.jar into your server mods/ folder.
+Built jars are written to `build/libs/hytale-mod-template-economy-1.1.0.jar`, with matching sources and javadoc jars next to it.
 
-## License
+## Commands
+- `/hdeconomymodstatus`: Shows runtime status for EconomyModPlugin.
+- `/hdeconomymoddemo`: Runs a demo action for EconomyModPlugin.
+- Common actions: `info, toggle, sample, credit-demo, transfer-demo, balance-demo`
 
-MIT
+## Project Layout
+- `src/main/java`: mod entry point, commands, state objects, and service logic
+- `src/main/resources/manifest.json`: metadata, entry class, and server target
+- `src/main/resources/Server`: bundled assets or UI resources that ship with the jar
+
+## Install
+1. Build the project with `./gradlew clean build`.
+2. Copy `build/libs/hytale-mod-template-economy-1.1.0.jar` into your server `mods/` directory.
+3. Restart the server so the bundled resources are loaded together with the code.
+
+## What to Change First
+- rename the package, command names, and manifest identifiers to match your project
+- replace the demo actions with your real gameplay, economy, networking, or UI logic
+- move any persistent state into the storage or config format you actually want to support
+
+## Notes
+- The Gradle build auto-detects a local `HytaleServer.jar` when one is nearby, but it can also resolve `com.hypixel.hytale:Server:0.5.3` directly from the Hytale Maven.
+- The templates are intentionally small enough to read in one sitting, so you can copy them into a new repo and start renaming immediately.
